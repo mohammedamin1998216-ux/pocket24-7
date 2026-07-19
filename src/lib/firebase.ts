@@ -6,13 +6,15 @@ import { getFirestore } from "firebase/firestore";
 // and sandbox hardcoded values for instant preview in AI Studio.
 const env = (import.meta as any).env || {};
 
+const isCustomUserConfig = !env.VITE_FIREBASE_PROJECT_ID;
+
 const firebaseConfig = {
-  apiKey: env.VITE_FIREBASE_API_KEY || "AIzaSyAHSIw1Q9XjmIdHrl8CZ2VxAXm8nznTIrw",
-  authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || "gen-lang-client-0785609130.firebaseapp.com",
-  projectId: env.VITE_FIREBASE_PROJECT_ID || "gen-lang-client-0785609130",
-  storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET || "gen-lang-client-0785609130.firebasestorage.app",
-  messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID || "657621359896",
-  appId: env.VITE_FIREBASE_APP_ID || "1:657621359896:web:ec4445432346825281926d"
+  apiKey: env.VITE_FIREBASE_API_KEY || "AIzaSyDCSrxnsrFZhQGiG6-s_VN_oCADg6xXIto",
+  authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || "asmr-5bd1b.firebaseapp.com",
+  projectId: env.VITE_FIREBASE_PROJECT_ID || "asmr-5bd1b",
+  storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET || "asmr-5bd1b.firebasestorage.app",
+  messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID || "234775654713",
+  appId: env.VITE_FIREBASE_APP_ID || "1:234775654713:web:4eccf9279500dfd228b8e8"
 };
 
 // Initialize Firebase
@@ -24,7 +26,7 @@ export const googleProvider = new GoogleAuthProvider();
 
 // Initialize Firestore
 // In AI Studio, we use a custom database ID. In standard/default setups, Firestore defaults to "(default)" or none.
-const databaseId = env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || "ai-studio-pocket24-bf8e57b8-c523-46f6-aed7-08c0567c261f";
+const databaseId = env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || (isCustomUserConfig ? "" : "ai-studio-pocket24-bf8e57b8-c523-46f6-aed7-08c0567c261f");
 
 export const db = databaseId && databaseId !== "default" && databaseId !== "(default)"
   ? getFirestore(app, databaseId)

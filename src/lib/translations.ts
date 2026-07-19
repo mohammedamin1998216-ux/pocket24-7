@@ -79,7 +79,19 @@ export const translations = {
     transferSuccess: 'تم التحويل الداخلي بنجاح!',
     depositDetected: 'تم الكشف عن طلب إيداع، بانتظار التأكيد على الشبكة.',
     marketNews: 'أخبار السوق والمال',
-    loadingNews: 'جاري تحميل آخر الأخبار المالية من محركات البحث...'
+    loadingNews: 'جاري تحميل آخر الأخبار المالية من محركات البحث...',
+    priceAlerts: 'تنبيهات الأسعار المخصصة',
+    createAlert: 'إنشاء تنبيه سعر جديد',
+    coin: 'العملة الرقمية',
+    targetPrice: 'السعر المستهدف ($)',
+    condition: 'الشرط',
+    above: 'أعلى من أو يساوي',
+    below: 'أقل من أو يساوي',
+    addAlert: 'إضافة تنبيه السعر',
+    activeAlerts: 'التنبيهات النشطة',
+    noActiveAlerts: 'لا توجد تنبيهات نشطة حالياً',
+    alertCreated: 'تم إنشاء تنبيه السعر بنجاح!',
+    alertDeleted: 'تم حذف التنبيه بنجاح!'
   },
   en: {
     appName: 'Pocket24',
@@ -159,7 +171,19 @@ export const translations = {
     transferSuccess: 'Internal transfer completed successfully!',
     depositDetected: 'Deposit detected, waiting for network confirmation.',
     marketNews: 'Market News & Trends',
-    loadingNews: 'Loading latest market insights from search grounding...'
+    loadingNews: 'Loading latest market insights from search grounding...',
+    priceAlerts: 'Custom Price Alerts',
+    createAlert: 'Create New Price Alert',
+    coin: 'Cryptocurrency',
+    targetPrice: 'Target Price ($)',
+    condition: 'Condition',
+    above: 'Greater than or Equal (>=)',
+    below: 'Less than or Equal (<=)',
+    addAlert: 'Add Price Alert',
+    activeAlerts: 'Active Alerts',
+    noActiveAlerts: 'No active price alerts currently',
+    alertCreated: 'Price alert created successfully!',
+    alertDeleted: 'Alert deleted successfully!'
   },
   fr: {
     appName: 'Pocket24',
@@ -239,6 +263,18 @@ export const translations = {
     transferSuccess: 'Transfert interne effectué avec succès !',
     depositDetected: 'Dépôt détecté, en attente de confirmation du réseau.',
     marketNews: 'Actualités du Marché & Finance',
-    loadingNews: 'Chargement des dernières tendances du marché...'
+    loadingNews: 'Chargement des dernières tendances du marché...',
+    priceAlerts: 'Alertes de Prix Personnalisées',
+    createAlert: 'Créer une Alerte de Prix',
+    coin: 'Cryptomonnaie',
+    targetPrice: 'Prix Cible ($)',
+    condition: 'Condition',
+    above: 'Supérieur ou Égal (>=)',
+    below: 'Inférieur ou Égal (<=)',
+    addAlert: 'Ajouter l\'Alerte',
+    activeAlerts: 'Alertes Actives',
+    noActiveAlerts: 'Aucune alerte de prix active',
+    alertCreated: 'Alerte de prix créée avec succès !',
+    alertDeleted: 'Alerte supprimée avec succès !'
   }
 };

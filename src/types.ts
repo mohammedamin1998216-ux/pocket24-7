@@ -45,3 +45,13 @@ export interface VipPlan {
   monthlyProfit: number;
   isHot: boolean;
 }
+
+export interface PriceAlert {
+  id: string;
+  uid: string;
+  coin: string;
+  targetPrice: number;
+  condition: 'above' | 'below';
+  createdAt: string;
+  triggered: boolean;
+}

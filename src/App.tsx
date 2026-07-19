@@ -49,11 +49,12 @@ import {
   query, 
   where, 
   orderBy, 
-  updateDoc 
+  updateDoc,
+  deleteDoc
 } from 'firebase/firestore';
 import { Language, translations } from './lib/translations';
 import { InteractiveChart } from './components/InteractiveChart';
-import { UserProfile, Transaction, CoinData, VipPlan } from './types';
+import { UserProfile, Transaction, CoinData, VipPlan, PriceAlert } from './types';
 
 export default function App() {
   // Localization & Theme States
@@ -112,6 +113,18 @@ export default function App() {
   // Market News Grounding state
   const [marketNews, setMarketNews] = useState<any[]>([]);
   const [loadingNews, setLoadingNews] = useState<boolean>(true);
+
+  // Price Alerts States
+  const [priceAlerts, setPriceAlerts] = useState<PriceAlert[]>([]);
+  const alertsRef = useRef<PriceAlert[]>([]);
+  const [alertCoin, setAlertCoin] = useState<string>('BTC');
+  const [alertTargetPrice, setAlertTargetPrice] = useState<string>('');
+  const [alertCondition, setAlertCondition] = useState<'above' | 'below'>('above');
+
+  // Keep ref updated
+  useEffect(() => {
+    alertsRef.current = priceAlerts;
+  }, [priceAlerts]);
 
   // Toast System
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -186,18 +199,50 @@ export default function App() {
 
     // Refresh coin ticks every 4 seconds
     const interval = setInterval(() => {
-      setCoinsList(prev => prev.map(coin => {
-        const changePercent = (Math.random() - 0.5) * 0.005;
-        const nextPrice = coin.price * (1 + changePercent);
-        const nextChange = changePercent >= 0 ? `+${(changePercent * 100).toFixed(1)}%` : `${(changePercent * 100).toFixed(1)}%`;
-        const updatedSparkline = [...coin.sparkline.slice(1), nextPrice];
-        return {
-          ...coin,
-          price: parseFloat(nextPrice.toFixed(2)),
-          change: nextChange,
-          sparkline: updatedSparkline
-        };
-      }));
+      setCoinsList(prev => {
+        const nextCoins = prev.map(coin => {
+          const changePercent = (Math.random() - 0.5) * 0.005;
+          const nextPrice = coin.price * (1 + changePercent);
+          const nextChange = changePercent >= 0 ? `+${(changePercent * 100).toFixed(1)}%` : `${(changePercent * 100).toFixed(1)}%`;
+          const updatedSparkline = [...coin.sparkline.slice(1), nextPrice];
+          return {
+            ...coin,
+            price: parseFloat(nextPrice.toFixed(2)),
+            change: nextChange,
+            sparkline: updatedSparkline
+          };
+        });
+
+        // Evaluate price alerts using ref to avoid stale closure
+        alertsRef.current.forEach(alert => {
+          if (!alert.triggered) {
+            const currentCoin = nextCoins.find(c => c.symbol === alert.coin);
+            if (currentCoin) {
+              const price = currentCoin.price;
+              let isTriggered = false;
+              if (alert.condition === 'above' && price >= alert.targetPrice) {
+                isTriggered = true;
+              } else if (alert.condition === 'below' && price <= alert.targetPrice) {
+                isTriggered = true;
+              }
+
+              if (isTriggered) {
+                alert.triggered = true; // prevent repeated triggers locally
+                const directionIcon = alert.condition === 'above' ? '▲' : '▼';
+                triggerToast(`🔔 ${alert.coin} ${directionIcon} $${alert.targetPrice} (${lang === 'ar' ? 'الحالي' : 'Current'}: $${price})`);
+                
+                // Save triggered state to Firestore
+                const alertDocRef = doc(db, "alerts", alert.id);
+                updateDoc(alertDocRef, { triggered: true }).catch(err => {
+                  console.error("Error updating triggered price alert:", err);
+                });
+              }
+            }
+          }
+        });
+
+        return nextCoins;
+      });
     }, 4000);
 
     return () => clearInterval(interval);
@@ -292,13 +337,32 @@ export default function App() {
           handleFirestoreError(error, OperationType.LIST, "transactions");
         });
 
+        // Real-time synchronization of custom price alerts
+        const alertsQuery = query(
+          collection(db, "alerts"),
+          where("uid", "==", currentUser.uid)
+        );
+        const unsubscribeAlerts = onSnapshot(alertsQuery, (snapshot) => {
+          const alertsList: PriceAlert[] = [];
+          snapshot.forEach(snapshotDoc => {
+            alertsList.push({ id: snapshotDoc.id, ...snapshotDoc.data() } as PriceAlert);
+          });
+          // Sort client-side by date desc
+          alertsList.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+          setPriceAlerts(alertsList);
+        }, (error) => {
+          handleFirestoreError(error, OperationType.LIST, "alerts");
+        });
+
         return () => {
           unsubscribeProfile();
           unsubscribeTransactions();
+          unsubscribeAlerts();
         };
       } else {
         setProfile(null);
         setTransactions([]);
+        setPriceAlerts([]);
       }
     });
 
@@ -475,6 +539,51 @@ export default function App() {
       triggerToast(t('vipSuccess'));
     } catch (error: any) {
       triggerToast(`فشل الاشتراك: ${error.message}`);
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
+  // Create a custom price alert in Firestore
+  const handleCreatePriceAlert = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) return;
+    const price = parseFloat(alertTargetPrice);
+    if (isNaN(price) || price <= 0) {
+      triggerToast(lang === 'ar' ? 'يرجى إدخال سعر مستهدف صالح' : 'Please enter a valid target price');
+      return;
+    }
+
+    try {
+      setLoadingAction('create_alert');
+      const newAlert = {
+        uid: user.uid,
+        coin: alertCoin,
+        targetPrice: price,
+        condition: alertCondition,
+        createdAt: new Date().toISOString(),
+        triggered: false
+      };
+      await addDoc(collection(db, "alerts"), newAlert);
+      setAlertTargetPrice('');
+      triggerToast(t('alertCreated'));
+    } catch (err) {
+      console.error("Error creating alert in Firestore:", err);
+      handleFirestoreError(err, OperationType.CREATE, "alerts");
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
+  // Delete a price alert
+  const handleDeletePriceAlert = async (alertId: string) => {
+    try {
+      setLoadingAction('delete_alert');
+      await deleteDoc(doc(db, "alerts", alertId));
+      triggerToast(t('alertDeleted'));
+    } catch (err) {
+      console.error("Error deleting alert in Firestore:", err);
+      handleFirestoreError(err, OperationType.DELETE, `alerts/${alertId}`);
     } finally {
       setLoadingAction(null);
     }
@@ -891,6 +1000,137 @@ export default function App() {
                           </div>
                         );
                       })}
+                    </div>
+                  </div>
+
+                  {/* Custom Price Alerts Section */}
+                  <div className="w-full mt-6 mb-4">
+                    <div className="flex justify-between items-center mb-3">
+                      <h4 className="font-black text-slate-800 dark:text-white flex items-center gap-1.5 text-sm">
+                        <Bell className="w-4.5 h-4.5 text-blue-500" />
+                        <span>{t('priceAlerts')}</span>
+                      </h4>
+                    </div>
+
+                    <div className="w-full rounded-2xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-900 p-4 shadow-sm mb-3">
+                      <form onSubmit={handleCreatePriceAlert} className="flex flex-col gap-3">
+                        <div className="grid grid-cols-2 gap-2">
+                          {/* Coin Selector */}
+                          <div className="flex flex-col gap-1">
+                            <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500">
+                              {t('coin')}
+                            </label>
+                            <select
+                              value={alertCoin}
+                              onChange={(e) => setAlertCoin(e.target.value)}
+                              className="w-full rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-800 p-2 text-xs font-bold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                            >
+                              {coinsList.map(c => (
+                                <option key={c.symbol} value={c.symbol}>
+                                  {c.symbol} (${c.price.toLocaleString()})
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          {/* Condition Selection */}
+                          <div className="flex flex-col gap-1">
+                            <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500">
+                              {t('condition')}
+                            </label>
+                            <select
+                              value={alertCondition}
+                              onChange={(e) => setAlertCondition(e.target.value as 'above' | 'below')}
+                              className="w-full rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-800 p-2 text-xs font-bold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                            >
+                              <option value="above">{t('above')}</option>
+                              <option value="below">{t('below')}</option>
+                            </select>
+                          </div>
+                        </div>
+
+                        {/* Target Price input & Add button */}
+                        <div className="flex gap-2 items-end">
+                          <div className="flex-1 flex flex-col gap-1">
+                            <label className="text-[10px] font-bold text-slate-400 dark:text-slate-500">
+                              {t('targetPrice')}
+                            </label>
+                            <input
+                              type="number"
+                              step="any"
+                              required
+                              placeholder={
+                                coinsList.find(c => c.symbol === alertCoin)
+                                  ? String(coinsList.find(c => c.symbol === alertCoin)?.price)
+                                  : '68000'
+                              }
+                              value={alertTargetPrice}
+                              onChange={(e) => setAlertTargetPrice(e.target.value)}
+                              className="w-full rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-800 p-2 text-xs font-bold text-slate-700 dark:text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            />
+                          </div>
+
+                          <button
+                            type="submit"
+                            disabled={loadingAction === 'create_alert'}
+                            className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold active:scale-[0.98] transition-all disabled:opacity-50 flex items-center gap-1 cursor-pointer h-[34px]"
+                          >
+                            {loadingAction === 'create_alert' ? (
+                              <Loader2 className="w-3 h-3 animate-spin" />
+                            ) : null}
+                            <span>{t('addAlert')}</span>
+                          </button>
+                        </div>
+                      </form>
+
+                      {/* Alerts list */}
+                      <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+                        <h5 className="text-[11px] font-bold text-slate-400 dark:text-slate-500 mb-2">
+                          {t('activeAlerts')}
+                        </h5>
+
+                        {priceAlerts.filter(a => !a.triggered).length === 0 ? (
+                          <div className="text-center py-4 text-[10px] font-bold text-slate-400">
+                            {t('noActiveAlerts')}
+                          </div>
+                        ) : (
+                          <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto pr-1">
+                            {priceAlerts.filter(a => !a.triggered).map((alert) => {
+                              const currentPrice = coinsList.find(c => c.symbol === alert.coin)?.price || 0;
+                              return (
+                                <div
+                                  key={alert.id}
+                                  className="flex justify-between items-center p-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-100/50 dark:border-slate-800/50 text-xs"
+                                >
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-bold text-slate-700 dark:text-slate-300">
+                                      {alert.coin}
+                                    </span>
+                                    <span className="text-[10px] font-black text-slate-400">
+                                      {alert.condition === 'above' ? '≥' : '≤'}
+                                    </span>
+                                    <span className="font-mono font-bold text-blue-500">
+                                      ${alert.targetPrice.toLocaleString()}
+                                    </span>
+                                    <span className="text-[9px] text-slate-400 font-medium">
+                                      ({lang === 'ar' ? 'الحالي' : 'Current'}: ${currentPrice.toLocaleString()})
+                                    </span>
+                                  </div>
+                                  <button
+                                    onClick={() => handleDeletePriceAlert(alert.id)}
+                                    disabled={loadingAction === 'delete_alert'}
+                                    className="p-1 rounded-lg hover:bg-red-500/10 text-slate-400 hover:text-red-500 transition-colors cursor-pointer"
+                                  >
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
 

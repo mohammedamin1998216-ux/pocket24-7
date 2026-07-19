@@ -28,9 +28,10 @@ import {
   RefreshCw,
   AlertTriangle,
   Send,
-  Loader2
+  Loader2,
+  Newspaper
 } from 'lucide-react';
-import { auth, db, googleProvider } from './lib/firebase';
+import { auth, db, googleProvider, OperationType, handleFirestoreError } from './lib/firebase';
 import { 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
@@ -107,6 +108,10 @@ export default function App() {
 
   // Sparkline data generation for top 10 coins
   const [coinsList, setCoinsList] = useState<CoinData[]>([]);
+
+  // Market News Grounding state
+  const [marketNews, setMarketNews] = useState<any[]>([]);
+  const [loadingNews, setLoadingNews] = useState<boolean>(true);
 
   // Toast System
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -198,6 +203,35 @@ export default function App() {
     return () => clearInterval(interval);
   }, []);
 
+  // Fetch market news using Google Search Grounding from our server API
+  useEffect(() => {
+    let active = true;
+    const fetchNews = async () => {
+      try {
+        setLoadingNews(true);
+        const response = await fetch(`/api/market-news?lang=${lang}`);
+        if (!response.ok) {
+          throw new Error("Failed to fetch news");
+        }
+        const data = await response.json();
+        if (active && data && Array.isArray(data.news)) {
+          setMarketNews(data.news);
+        }
+      } catch (err) {
+        console.error("Error loading news in frontend:", err);
+      } finally {
+        if (active) {
+          setLoadingNews(false);
+        }
+      }
+    };
+
+    fetchNews();
+    return () => {
+      active = false;
+    };
+  }, [lang]);
+
   // Firebase auth state tracking and real-time Firestore database synchronization
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, async (currentUser) => {
@@ -230,9 +264,15 @@ export default function App() {
               vipPlanId: null,
               vipPlanSubscribedAt: null
             };
-            await setDoc(userDocRef, newProfile);
-            setProfile(newProfile);
+            try {
+              await setDoc(userDocRef, newProfile);
+              setProfile(newProfile);
+            } catch (err) {
+              handleFirestoreError(err, OperationType.CREATE, `users/${currentUser.uid}`);
+            }
           }
+        }, (error) => {
+          handleFirestoreError(error, OperationType.GET, `users/${currentUser.uid}`);
         });
 
         // Real-time synchronization of transactions
@@ -248,6 +288,8 @@ export default function App() {
           // Sort client-side by date desc
           txsList.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
           setTransactions(txsList);
+        }, (error) => {
+          handleFirestoreError(error, OperationType.LIST, "transactions");
         });
 
         return () => {
@@ -850,6 +892,80 @@ export default function App() {
                         );
                       })}
                     </div>
+                  </div>
+
+                  {/* Market News Section using Search Grounding */}
+                  <div className="w-full mt-6 mb-4">
+                    <div className="flex justify-between items-center mb-3">
+                      <h4 className="font-black text-slate-800 dark:text-white flex items-center gap-1.5 text-sm">
+                        <Newspaper className="w-4.5 h-4.5 text-blue-500" />
+                        <span>{t('marketNews')}</span>
+                      </h4>
+                      <button
+                        onClick={async () => {
+                          try {
+                            setLoadingNews(true);
+                            const response = await fetch(`/api/market-news?lang=${lang}`);
+                            if (response.ok) {
+                              const data = await response.json();
+                              if (data && Array.isArray(data.news)) {
+                                setMarketNews(data.news);
+                              }
+                            }
+                          } catch (err) {
+                            console.error("Refresh error:", err);
+                          } finally {
+                            setLoadingNews(false);
+                          }
+                        }}
+                        disabled={loadingNews}
+                        className="p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-blue-500 cursor-pointer disabled:opacity-50 transition-colors"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${loadingNews ? 'animate-spin text-blue-500' : ''}`} />
+                      </button>
+                    </div>
+
+                    {loadingNews ? (
+                      <div className="w-full p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-900 flex flex-col items-center justify-center gap-2">
+                        <Loader2 className="w-6 h-6 animate-spin text-blue-500" />
+                        <span className="text-xs font-bold text-slate-400 dark:text-slate-500 animate-pulse">
+                          {t('loadingNews')}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col gap-3">
+                        {marketNews.length === 0 ? (
+                          <div className="w-full p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-900 text-center text-xs font-bold text-slate-400">
+                            {lang === 'ar' ? 'لا توجد أخبار حالياً' : 'No news available currently'}
+                          </div>
+                        ) : (
+                          marketNews.map((item, idx) => (
+                            <a
+                              key={idx}
+                              href={item.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              referrerPolicy="no-referrer"
+                              className="w-full rounded-2xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-900 p-4 flex flex-col gap-1.5 hover:bg-slate-50 dark:hover:bg-slate-850 cursor-pointer shadow-sm transition-all hover:-translate-y-0.5 text-left"
+                              style={{ direction: lang === 'ar' ? 'rtl' : 'ltr' }}
+                            >
+                              <div className="flex justify-between items-center text-[10px] font-bold text-slate-400 dark:text-slate-500 mb-1">
+                                <span className="px-2 py-0.5 rounded bg-blue-500/10 text-blue-500 font-bold">
+                                  {item.source}
+                                </span>
+                                <span className="font-mono text-[9px]">{item.time}</span>
+                              </div>
+                              <h5 className="font-black text-xs text-slate-800 dark:text-white leading-snug hover:text-blue-500 transition-colors">
+                                {item.title}
+                              </h5>
+                              <p className="text-[11px] font-bold text-slate-400 dark:text-slate-500 leading-normal mt-0.5">
+                                {item.summary}
+                              </p>
+                            </a>
+                          ))
+                        )}
+                      </div>
+                    )}
                   </div>
 
                 </motion.div>

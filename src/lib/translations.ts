@@ -77,7 +77,9 @@ export const translations = {
     noTransactions: 'لا توجد معاملات بعد',
     withdrawSuccess: 'تم تقديم طلب السحب بنجاح وهو قيد المراجعة.',
     transferSuccess: 'تم التحويل الداخلي بنجاح!',
-    depositDetected: 'تم الكشف عن طلب إيداع، بانتظار التأكيد على الشبكة.'
+    depositDetected: 'تم الكشف عن طلب إيداع، بانتظار التأكيد على الشبكة.',
+    marketNews: 'أخبار السوق والمال',
+    loadingNews: 'جاري تحميل آخر الأخبار المالية من محركات البحث...'
   },
   en: {
     appName: 'Pocket24',
@@ -155,7 +157,9 @@ export const translations = {
     noTransactions: 'No transactions yet',
     withdrawSuccess: 'Withdrawal request submitted successfully and is under review.',
     transferSuccess: 'Internal transfer completed successfully!',
-    depositDetected: 'Deposit detected, waiting for network confirmation.'
+    depositDetected: 'Deposit detected, waiting for network confirmation.',
+    marketNews: 'Market News & Trends',
+    loadingNews: 'Loading latest market insights from search grounding...'
   },
   fr: {
     appName: 'Pocket24',
@@ -233,6 +237,8 @@ export const translations = {
     noTransactions: 'Aucune transaction pour le moment',
     withdrawSuccess: 'Demande de retrait soumise avec succès et en cours d\'examen.',
     transferSuccess: 'Transfert interne effectué avec succès !',
-    depositDetected: 'Dépôt détecté, en attente de confirmation du réseau.'
+    depositDetected: 'Dépôt détecté, en attente de confirmation du réseau.',
+    marketNews: 'Actualités du Marché & Finance',
+    loadingNews: 'Chargement des dernières tendances du marché...'
   }
 };

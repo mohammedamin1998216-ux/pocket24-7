@@ -22,17 +22,34 @@ async function startServer() {
     },
   });
 
+  // In-memory cache for market news to protect Gemini API quota
+  const newsCache: {
+    en: { data: any[]; timestamp: number } | null;
+    ar: { data: any[]; timestamp: number } | null;
+  } = {
+    en: null,
+    ar: null,
+  };
+  const CACHE_DURATION_MS = 10 * 60 * 1000; // Cache news for 10 minutes
+
   // API endpoint for Market News using Google Search Grounding
   app.get("/api/market-news", async (req, res) => {
+    const lang = req.query.lang === "ar" ? "ar" : "en";
+    const now = Date.now();
+
+    // Check if we have valid cache
+    const cached = newsCache[lang];
+    if (cached && now - cached.timestamp < CACHE_DURATION_MS) {
+      return res.json({ news: cached.data });
+    }
+
     try {
       if (!process.env.GEMINI_API_KEY) {
         console.warn("GEMINI_API_KEY not found on server. Using high-quality mock data.");
         return res.json({
-          news: getMockNews(req.query.lang === "ar" ? "ar" : "en")
+          news: getMockNews(lang)
         });
       }
-
-      const lang = req.query.lang === "ar" ? "ar" : "en";
 
       let prompt = "";
       if (lang === "ar") {
@@ -77,10 +94,23 @@ async function startServer() {
         news = getMockNews(lang);
       }
 
-      res.json({ news: news.slice(0, 3) });
+      // Keep only top 3 and update the cache
+      const finalNews = news.slice(0, 3);
+      newsCache[lang] = {
+        data: finalNews,
+        timestamp: now
+      };
+
+      res.json({ news: finalNews });
     } catch (error) {
       console.error("Error in /api/market-news:", error);
-      const lang = req.query.lang === "ar" ? "ar" : "en";
+      
+      // On API failure (such as quota exceeded), try to serve stale cache if available, otherwise fallback to mock data
+      if (cached) {
+        console.log(`Serving stale news cache for ${lang} due to API error.`);
+        return res.json({ news: cached.data });
+      }
+
       res.json({ news: getMockNews(lang) });
     }
   });
